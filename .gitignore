@@ -1,0 +1,7 @@
+node_modules/
+__pycache__/
+chroma_db/
+venv/
+.env
+temp/
+*.pdf

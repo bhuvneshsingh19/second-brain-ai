@@ -1,32 +1,41 @@
 from fastapi import FastAPI, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from langchain_community.document_loaders import PyPDFLoader, WebBaseLoader
+from langchain_community.document_loaders import PyPDFLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from langchain_community.vectorstores import Chroma
 from langchain_core.documents import Document
 from langchain_core.messages import SystemMessage, HumanMessage
 from langchain_google_genai import ChatGoogleGenerativeAI
 import shutil
 import os
+import sys
 import uvicorn
+
+# Import database functions
 from database import insert_document, search_documents
 
-# --- NEW: LOAD ENV VARIABLES ---
+# --- LOAD ENV VARIABLES ---
 from dotenv import load_dotenv
-# Try loading from current folder, or go up one level to root
-load_dotenv() 
-load_dotenv("../.env") 
-# -------------------------------
+load_dotenv()
+# --------------------------
 
 app = FastAPI()
 
-if os.path.exists("./chroma_db"):
+# --- SMART STARTUP CLEANUP ---
+# This ensures we start with a fresh brain every time the server restarts.
+# It checks the OS to find the correct database folder (matching database.py).
+if sys.platform.startswith('linux'):
+    DB_PATH = "/tmp/chroma_db"
+else:
+    DB_PATH = "./chroma_db"
+
+if os.path.exists(DB_PATH):
     try:
-        shutil.rmtree("./chroma_db")
-        print("🧹 Cleaned up old database storage for fresh start.")
+        shutil.rmtree(DB_PATH)
+        print(f"🧹 Cleaned up old database at {DB_PATH}")
     except Exception as e:
         print(f"⚠️ Could not clear DB: {e}")
+# -----------------------------
 
 app.add_middleware(
     CORSMiddleware,
@@ -40,8 +49,11 @@ class ChatRequest(BaseModel):
 
 @app.post("/upload")
 async def upload_file(file: UploadFile = File(...), type: str = Form(...)):
+    # Ensure temp directory exists for processing uploads
     os.makedirs("temp", exist_ok=True)
     file_path = f"temp/{file.filename}"
+    
+    # Save the uploaded file temporarily
     with open(file_path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
 
@@ -55,9 +67,11 @@ async def upload_file(file: UploadFile = File(...), type: str = Form(...)):
             with open(file_path, 'r', encoding='utf-8') as f:
                 docs = [Document(page_content=f.read())]
         
+        # Split text into chunks
         splitter = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=50)
         splits = splitter.split_documents(docs)
 
+        # Insert chunks into the database (database.py handles the location)
         for split in splits:
             meta = {"source": file.filename, "type": type}
             insert_document(split.page_content, meta)
@@ -69,6 +83,7 @@ async def upload_file(file: UploadFile = File(...), type: str = Form(...)):
         print(f"Error: {e}")
         return {"message": f"Error processing file: {str(e)}"}
     finally:
+        # Clean up the temp file
         if os.path.exists(file_path):
             os.remove(file_path)
 
@@ -77,20 +92,18 @@ async def chat(request: ChatRequest):
     # 1. Search Local DB
     results = search_documents(request.message)
     
-    # Optional: If no results found, you can still answer generally
     context_text = ""
     if results:
         context_text = "\n\n".join([r["content"] for r in results])
     
     # 2. Generate Answer with Google Gemini
-    # Ensure Key is grabbed from environment
     api_key = os.getenv("GOOGLE_API_KEY")
     if not api_key:
-        print("CRITICAL ERROR: GOOGLE_API_KEY is missing from environment.")
-        return {"reply": "System Error: API Key missing. Please check .env file.", "sources": []}
+        return {"reply": "System Error: API Key missing.", "sources": []}
 
+    # Use the robust model alias
     llm = ChatGoogleGenerativeAI(
-        model="gemini-flash-latest",  # <--- Use this alias from your list
+        model="gemini-flash-latest", 
         google_api_key=api_key
     )
     

@@ -1,38 +1,43 @@
+# --- SMART DATABASE CONFIGURATION ---
 import os
 import shutil
 import sys
 from dotenv import load_dotenv
 
-# --- SMART FIX FOR RENDER DEPLOYMENT ---
-# This checks: "Am I running on Linux?"
-# If yes, it applies the SQLite fix for ChromaDB.
-# If no (Windows), it skips this and runs normally.
+# 1. Linux/Render Compatibility Fix (SQLite)
 if sys.platform.startswith('linux'):
     try:
         __import__('pysqlite3')
         sys.modules['sqlite3'] = sys.modules.pop('pysqlite3')
     except ImportError:
         pass
-# ---------------------------------------
+
+# 2. Define the Brain Storage Location
+# On Render (Linux), we MUST use /tmp because the main folder is Read-Only.
+# On Windows (Laptop), we use the local folder.
+if sys.platform.startswith('linux'):
+    PERSIST_DIRECTORY = "/tmp/chroma_db"
+else:
+    PERSIST_DIRECTORY = "./chroma_db"
 
 from langchain_google_genai import GoogleGenerativeAIEmbeddings
 from langchain_community.vectorstores import Chroma
 
 load_dotenv()
 
-# 1. Initialize Google Embeddings
+# 3. Initialize Embeddings (Google)
 api_key = os.getenv("GOOGLE_API_KEY")
 if not api_key:
     raise ValueError("GOOGLE_API_KEY is missing!")
 
 embeddings_model = GoogleGenerativeAIEmbeddings(
-    model="models/text-embedding-004",   
+    model="models/text-embedding-004", 
     google_api_key=api_key
 )
 
-# 2. Initialize ChromaDB
+# 4. Initialize ChromaDB at the correct writable path
 vector_db = Chroma(
-    persist_directory="./chroma_db",
+    persist_directory=PERSIST_DIRECTORY,
     embedding_function=embeddings_model,
     collection_name="second_brain_files"
 )

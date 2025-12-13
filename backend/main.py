@@ -21,6 +21,13 @@ load_dotenv("../.env")
 
 app = FastAPI()
 
+if os.path.exists("./chroma_db"):
+    try:
+        shutil.rmtree("./chroma_db")
+        print("🧹 Cleaned up old database storage for fresh start.")
+    except Exception as e:
+        print(f"⚠️ Could not clear DB: {e}")
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],

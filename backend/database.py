@@ -1,13 +1,26 @@
 import os
 import shutil
-# --- CRITICAL CHANGE: Use Google, NOT HuggingFace ---
+import sys
+from dotenv import load_dotenv
+
+# --- SMART FIX FOR RENDER DEPLOYMENT ---
+# This checks: "Am I running on Linux?"
+# If yes, it applies the SQLite fix for ChromaDB.
+# If no (Windows), it skips this and runs normally.
+if sys.platform.startswith('linux'):
+    try:
+        __import__('pysqlite3')
+        sys.modules['sqlite3'] = sys.modules.pop('pysqlite3')
+    except ImportError:
+        pass
+# ---------------------------------------
+
 from langchain_google_genai import GoogleGenerativeAIEmbeddings
 from langchain_community.vectorstores import Chroma
-from dotenv import load_dotenv
 
 load_dotenv()
 
-# 1. Initialize Google Embeddings (Lightweight, runs on Cloud)
+# 1. Initialize Google Embeddings
 api_key = os.getenv("GOOGLE_API_KEY")
 if not api_key:
     raise ValueError("GOOGLE_API_KEY is missing!")

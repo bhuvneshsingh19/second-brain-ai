@@ -1,3 +1,20 @@
+# 🧠 Second Brain AI
+
+A full-stack AI application that acts as your personal knowledge base. Upload PDFs and chat with them using Google Gemini & Vector Search.
+
+### 🚀 Live Demo
+**[Click here to try the App](https://second-brain-ai-j55w.onrender.com/)**
+*(Note: It runs on a free instance, so please allow 50 seconds for the backend to wake up!)*
+
+---
+
+### 🛠️ Tech Stack
+* **Frontend:** React, Vite, TailwindCSS
+* **Backend:** FastAPI, Python
+* **AI:** LangChain, Google Gemini, ChromaDB (Vector Store)
+* **Deployment:** Render (Dockerized)
+
+
 ## How to Run Locally
 1. Backend:
    cd backend

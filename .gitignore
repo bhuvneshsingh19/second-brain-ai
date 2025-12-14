@@ -4,4 +4,3 @@ chroma_db/
 venv/
 .env
 temp/
-*.pdf

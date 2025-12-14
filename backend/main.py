@@ -21,24 +21,18 @@ load_dotenv()
 
 app = FastAPI()
 
-# --- SMART STARTUP CLEANUP ---
-# This matches the logic in database.py to ensure we clean the right folder.
 if os.getenv('RENDER'):
-    DB_PATH = "/tmp/chroma_storage"
-    print("🚀 Startup: Detected RENDER environment.")
+    print("🚀 Startup: Running on Render (In-Memory Mode). No cleanup needed.")
 else:
+    # Only clean up disk on local laptop
     DB_PATH = "./chroma_storage"
-    print("💻 Startup: Detected LOCAL environment.")
-
-print(f"🧹 Checking for old database at {DB_PATH}...")
-if os.path.exists(DB_PATH):
-    try:
-        shutil.rmtree(DB_PATH)
-        print(f"✅ Cleaned up old database at {DB_PATH}")
-    except Exception as e:
-        print(f"⚠️ Could not clear DB (might be in use or permission error): {e}")
-else:
-    print("ℹ️ No old database found. Starting fresh.")
+    print(f"💻 Startup: Checking local DB at {DB_PATH}...")
+    if os.path.exists(DB_PATH):
+        try:
+            shutil.rmtree(DB_PATH)
+            print("✅ Cleaned up old local database.")
+        except Exception as e:
+            print(f"⚠️ Warning: Could not clear local DB: {e}")
 # -----------------------------
 
 app.add_middleware(

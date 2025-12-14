@@ -1,11 +1,8 @@
-import os
+# --- 1. LINUX/RENDER SQLITE FIX (MUST BE AT THE VERY TOP) ---
 import sys
-import shutil
-from dotenv import load_dotenv
-from langchain_google_genai import GoogleGenerativeAIEmbeddings
-from langchain_community.vectorstores import Chroma
+import os
 
-# --- 1. LINUX/RENDER SQLITE FIX ---
+# We must apply this fix BEFORE importing anything else (like langchain or chroma)
 if os.getenv('RENDER') or sys.platform.startswith('linux'):
     try:
         __import__('pysqlite3')
@@ -13,20 +10,23 @@ if os.getenv('RENDER') or sys.platform.startswith('linux'):
         print("✅ Linux/Render detected: Swapped SQLite to pysqlite3")
     except ImportError:
         print("⚠️ Linux detected but pysqlite3 not found. Using default.")
+# ------------------------------------------------------------
+
+from dotenv import load_dotenv
+from langchain_google_genai import GoogleGenerativeAIEmbeddings
+from langchain_community.vectorstores import Chroma
 
 load_dotenv()
 
-# --- 2. SMART PATH CONFIGURATION ---
-# Check if running on Render explicitly
+# --- 2. SMART CONFIGURATION ---
+# On Render, we use None (Memory-Only) to strictly avoid disk permission errors.
+# On Laptop, we use disk storage so you can restart without losing data.
 if os.getenv('RENDER'):
-    PERSIST_DIRECTORY = "/tmp/chroma_storage"
-    print(f"📂 RUNNING ON RENDER: Using temp DB at {PERSIST_DIRECTORY}")
+    PERSIST_DIRECTORY = None 
+    print("🧠 RUNNING ON RENDER: Using In-Memory Database (No Disk)")
 else:
     PERSIST_DIRECTORY = "./chroma_storage"
-    print(f"💻 RUNNING LOCALLY: Using local DB at {PERSIST_DIRECTORY}")
-
-# Ensure the directory exists
-os.makedirs(PERSIST_DIRECTORY, exist_ok=True)
+    print(f"💻 RUNNING LOCALLY: Using disk DB at {PERSIST_DIRECTORY}")
 
 # 3. Initialize Embeddings
 api_key = os.getenv("GOOGLE_API_KEY")
@@ -48,7 +48,7 @@ vector_db = Chroma(
 def insert_document(content, meta):
     try:
         vector_db.add_texts(texts=[content], metadatas=[meta])
-        print(f"✅ Successfully saved chunk to {PERSIST_DIRECTORY}")
+        print("✅ Chunk saved successfully.")
     except Exception as e:
         print(f"❌ DATABASE ERROR: {e}")
         raise e

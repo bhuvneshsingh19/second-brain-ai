@@ -11,7 +11,7 @@ import os
 import sys
 import uvicorn
 
-# Import database functions
+# Import database functions from your database.py file
 from database import insert_document, search_documents
 
 # --- LOAD ENV VARIABLES ---
@@ -22,19 +22,23 @@ load_dotenv()
 app = FastAPI()
 
 # --- SMART STARTUP CLEANUP ---
-# This ensures we start with a fresh brain every time the server restarts.
-# It checks the OS to find the correct database folder (matching database.py).
-if sys.platform.startswith('linux'):
-    DB_PATH = "/tmp/chroma_db"
+# This matches the logic in database.py to ensure we clean the right folder.
+if os.getenv('RENDER'):
+    DB_PATH = "/tmp/chroma_storage"
+    print("🚀 Startup: Detected RENDER environment.")
 else:
-    DB_PATH = "./chroma_db"
+    DB_PATH = "./chroma_storage"
+    print("💻 Startup: Detected LOCAL environment.")
 
+print(f"🧹 Checking for old database at {DB_PATH}...")
 if os.path.exists(DB_PATH):
     try:
         shutil.rmtree(DB_PATH)
-        print(f"🧹 Cleaned up old database at {DB_PATH}")
+        print(f"✅ Cleaned up old database at {DB_PATH}")
     except Exception as e:
-        print(f"⚠️ Could not clear DB: {e}")
+        print(f"⚠️ Could not clear DB (might be in use or permission error): {e}")
+else:
+    print("ℹ️ No old database found. Starting fresh.")
 # -----------------------------
 
 app.add_middleware(
@@ -49,7 +53,7 @@ class ChatRequest(BaseModel):
 
 @app.post("/upload")
 async def upload_file(file: UploadFile = File(...), type: str = Form(...)):
-    # Ensure temp directory exists for processing uploads
+    # Create a temp folder for processing the raw PDF
     os.makedirs("temp", exist_ok=True)
     file_path = f"temp/{file.filename}"
     
@@ -71,7 +75,8 @@ async def upload_file(file: UploadFile = File(...), type: str = Form(...)):
         splitter = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=50)
         splits = splitter.split_documents(docs)
 
-        # Insert chunks into the database (database.py handles the location)
+        # Insert chunks into the database
+        # (database.py handles saving to the correct /tmp/ folder automatically)
         for split in splits:
             meta = {"source": file.filename, "type": type}
             insert_document(split.page_content, meta)
@@ -80,17 +85,21 @@ async def upload_file(file: UploadFile = File(...), type: str = Form(...)):
         return {"message": "File processed and indexed successfully"}
         
     except Exception as e:
-        print(f"Error: {e}")
+        print(f"❌ Error in upload: {e}")
         return {"message": f"Error processing file: {str(e)}"}
     finally:
-        # Clean up the temp file
+        # Always clean up the raw uploaded file
         if os.path.exists(file_path):
             os.remove(file_path)
 
 @app.post("/chat")
 async def chat(request: ChatRequest):
     # 1. Search Local DB
-    results = search_documents(request.message)
+    try:
+        results = search_documents(request.message)
+    except Exception as e:
+        print(f"❌ Database Search Error: {e}")
+        return {"reply": "I cannot access my memory right now. Please try uploading the document again.", "sources": []}
     
     context_text = ""
     if results:
@@ -101,7 +110,7 @@ async def chat(request: ChatRequest):
     if not api_key:
         return {"reply": "System Error: API Key missing.", "sources": []}
 
-    # Use the robust model alias
+    # Use the robust model alias we found earlier
     llm = ChatGoogleGenerativeAI(
         model="gemini-flash-latest", 
         google_api_key=api_key
